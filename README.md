@@ -1,0 +1,2 @@
+# NextFlowPipeline
+Nextflow polyshing pipeline
