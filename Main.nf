@@ -55,6 +55,8 @@ def helpMessage() {
 		--genes				Gene and operon annotations used for Quast
 		
 		--chunck			Contig length for pilon Parallelization (default value : 10000000)
+		
+		--SRAlign			TO DO
 				
     """.stripIndent()
 }
@@ -100,15 +102,15 @@ params.genes			= false
 
 params.chunck			= 10000000
 
-
-//Voir pour enlever Initialchanges ##############################################
 params.Initialchanges	= false
 
+params.SRAlign			= 'longranger'
 
 
-//********************************************************************
-//* Check if reads are given and not empty; prepare boolean for runs *
-//********************************************************************
+
+//******************************************
+//* Check if reads are given and not empty *
+//******************************************
 if (!params.longReads && !params.shortReads) {
 	exit 1, "You must specify at least one short or long read file using --shortReads or --longReads."
 }
@@ -147,13 +149,13 @@ if (!params.lineage) {
 	mode3 = true
 }
 
-//Check the long reads polisher
+//*************************************
+//* Check consistency of LR Polyshing *
+//*************************************
 if (params.LRPolish != 'wtdbg2' && params.LRPolish != 'racon' && params.LRPolish != 'pilon' && params.LRPolish != 'medaka'){
 	exit 1, "You must specify an available short reads polisher (wtdbg2, racon, medaka or pilon)"
 }  
-//******************************
-//* Check consistency of LRNum *
-//******************************
+
 if (params.LRNum.getClass() == Integer) {
 	if  (params.LRNum > 5) {
 		println "WARN : you are running ${params.raconNum} racon polishing"
@@ -163,21 +165,21 @@ if (params.LRNum.getClass() == Integer) {
 } else if (params.LRNum.getClass() != Integer) {
 	exit 3, "Option --LRNum must be an integer : ${params.LRNum}"
 }
+
 //****************************************
-//* If NoChanges option is not specified *
+//* If NoChanges option is NOT specified *
 //****************************************
 if (!params.NoChanges){
-//**********************************
-//* Check the short reads polisher *
-//**********************************
+
+//*************************************	
+//* Check consistency of SR Polyshing *
+//*************************************
 	if (params.SRPolish != 'wtdbg2' && params.SRPolish != 'racon' && params.SRPolish != 'pilon'){
 		if (!params.NoChanges){
 			exit 1, "You must specify an available short reads polisher (wtdbg2, racon or pilon)"
 		}
 	}
-//******************************	
-//* Check consistency of SRNum *
-//******************************
+
 	if (params.SRNum.getClass() == Integer) {
 		if  (params.SRNum > 5) {
 			println "WARN : you are running ${params.SRNum} pilon polishing"
@@ -189,9 +191,9 @@ if (!params.NoChanges){
 	}
 }
 
-//********************************
-//* If Quast imput are specified *
-//********************************
+//*************************************************************
+//* If Quast imput are specified A REVOIR PB VARIABLE GLOBALE *
+//*************************************************************
 if (params.reference && params.genes) {
 	Ref=Channel.fromPath(params.reference)
 	                 .ifEmpty {exit 2, "Reference genome file not found: ${params.reference}"}
@@ -418,36 +420,6 @@ if (mode1) {
 			"""
 		}
 	}
-			
-
-/*
- *------------------------------------------------------
- *					BUSCO QUALITY
- *------------------------------------------------------
- */
-//Decommenter + ajouter AssemblyBusco dans tous les outputs process pour reutiliser
-//	if (mode3){
-//		process buscoLR {
-//			label 'buscoLR'
-//			
-//			input:
-//			file assembly from AssemblyBusco_ch
-//			file lineage from Lineage_LR_ch.collect()
-//			val species from BUSCOspecies_ch
-//			
-//			output:
-//			file "run_BuscoLR${name}" into busco_first_assembly_ch
-//			
-//			script:
-//			name = iteration_polisher.size()
-//			"""
-//			module load system/Python-3.6.3
-//			module load bioinfo/augustus-3.3
-//			module load bioinfo/busco-3.0.2
-//			python3 /usr/local/bioinfo/src/BUSCO/busco-3.0.2/scripts/run_BUSCO.py -c 8 -i ${assembly} -l ${lineage} -m geno --limit 10 -o BuscoLR${name} -sp ${species}
-//			"""
-//		}
-//	}
 }
 
 /*
@@ -467,7 +439,7 @@ if (mode2) {
 	//	file shortreads from ShortReads_ch.collect()
 	//
 	//	output:
-	//	file 'shortreads.rename.fq.gz' into ShortReadsBWA_ch, ShortReadsPolisher_ch, ShortReadsQuast_ch
+	//	file 'shortreads.rename.fq.gz' into ShortReadsAligner_ch, ShortReadsPolisher_ch, ShortReadsQuast_ch
 	//
 	//	shell:
 	//	if ("${shortreads}".endsWith('.gz')){
@@ -480,11 +452,11 @@ if (mode2) {
 	//		'''
 	//	}
 	//}
-	ShortReads_ch.collect().into{ShortReadsBWA_ch; ShortReadsPolisher_ch; ShortReadsQuast_ch}
+	ShortReads_ch.collect().into{ShortReadsAligner_ch; ShortReadsPolisher_ch; ShortReadsQuast_ch}
 		
 //* Create iteration condition, PolisherAssemblySR channel and the loop for multiple polish using short reads *
 //* Different condition if Params.NoChanges specified, to loop over process until the assembly don't change *
-	iteration_polisherSR=["a"]
+	iteration_polisherSR=[]
 	PolisherAssemblySR_ch = Channel.create()
 	
 //* If no long reads detected, starting first polishing with short reads *
@@ -503,30 +475,34 @@ if (mode2) {
 	} else {
 		condition = { iteration_polisherSR.size()<SR_number ? it : Channel.STOP }	
 		FinalPolisherAssembly_ch.mix(PolisherAssemblySR_ch.map(condition))
-							.into{AssemblyBwa_ch; AssemblyPolisher_ch; AssemblyDivide_ch}
+							.into{AssemblyBwa_ch; AssemblyPolisher_ch; AssemblyDivide_ch; Assembly4Longranger_ch}
 	}
 		
 
 //* Map short reads to assembly using bwa-mem *
-	process bwa_mem {
-		label 'bwa_mem'
-	
-		input:
-		file assembly from AssemblyBwa_ch
-		file reads from ShortReadsBWA_ch
-	
-		output:
-		file 'map.polisher.sam' into MapBwa_ch
-	
-		script:
-		"""
-		module load bioinfo/samtools-1.4
-		module load bioinfo/bwa-0.7.17
-		bwa index ${assembly}
-		bwa mem -t 8 ${assembly} ${reads} >  map.polisher.sam
-	
-		"""
+	if (params.SRAlign == "samtools"){
+		process bwa_mem {
+			label 'bwa_mem'
+		
+			input:
+			file assembly from AssemblyBwa_ch
+			file reads from ShortReadsAligner_ch
+		
+			output:
+			file 'map.polisher.sam' into MapBwa_ch
+		
+			script:
+			"""
+			module load bioinfo/samtools-1.4
+			module load bioinfo/bwa-0.7.17
+			bwa index ${assembly}
+			bwa mem -t 8 ${assembly} ${reads} >  map.polisher.sam
+		
+			"""
+		}
 	}
+	
+
 		
 /*
 *------------------------------------------------------
@@ -541,26 +517,62 @@ if (mode2) {
 //* If SRPolish = pilon, start polishing the assembly using pilon and short reads *
 //*********************************************************************************
 		if (params.SRPolish == "pilon"){
+			chunck = Channel.from(params.chunck)
 			
-			process samtools{
-				label 'samtools'
-				input:
-				file map from MapBwa_ch
+			if (params.SRAlign == "samtools"){
+				process samtools{
+					label 'samtools'
+					input:
+					file map from MapBwa_ch
+					
+					output:
+					set file("map.polisher.sorted.bam"), file("map.polisher.sorted.bam.bai") into MapPilon_ch
 				
-				output:
-				set file("map.polisher.sorted.bam"), file("map.polisher.sorted.bam.bai") into MapPilon_ch
+					script:
+					"""
+					module load bioinfo/samtools-1.4
+					samtools view -S -b ${map} > map.polisher.bam
+					samtools sort map.polisher.bam -o map.polisher.sorted.bam
+					samtools index map.polisher.sorted.bam 
+					"""
+				}
+			}
 			
-				script:
-				"""
-				module load bioinfo/samtools-1.4
-				samtools view -S -b ${map} > map.polisher.bam
-				samtools sort map.polisher.bam -o map.polisher.sorted.bam
-				samtools index map.polisher.sorted.bam 
-				"""
+			if (params.SRAlign == "longranger"){
+				process mkref {
+					label 'longranger_mkref'
+			
+					input:
+					file assembly from Assembly4Longranger_ch
+			
+					output:
+					file 'refdata*' into LongrangerRef_ch
+			
+					script:
+					"""
+					module load bioinfo/longranger-2.2.2
+					longranger mkref ${assembly}
+					"""
+				}
+	
+				process align {
+					label 'longranger_align'
+			
+					input:
+					file reference from LongrangerRef_ch
+					file reads from ShortReadsAligner_ch
+			
+					output:
+					set file ("ALIGN/outs/possorted_bam.bam"), file ("ALIGN/outs/possorted_bam.bam.bai") into MapPilon_ch
+								
+					script:
+					"""
+					module load bioinfo/longranger-2.2.2
+					longranger align --maxjobs=16 --reference=${reference} --id=ALIGN --fastqs=${reads}
+					"""
+				}
 			}
 							
-							
-			chunck = Channel.from(params.chunck)
 			process divideContigs{
 				label 'divideContigs'
 				input:
@@ -578,30 +590,31 @@ if (mode2) {
 			}
 			
 			ListContigs_ch.splitText().map{it.split("\n")}.flatten().set{SplittedContigs_ch}
+			AssemblyBamIndex_ch = AssemblyPolisher_ch.combine(MapPilon_ch)
+			MergedInput_ch = SplittedContigs_ch.combine(AssemblyBamIndex_ch)
 						
 			process pilonSR {
 				label 'pilonSR'
 			
 				input:
-				file assembly from AssemblyPolisher_ch.first()
-				set file bam, index from MapPilon_ch.first()
-				val contigs from SplittedContigs_ch
+				//file assembly from AssemblyPolisher_ch.first()
+				//set bam, index from MapPilon_ch.first()
+				//val contigs from SplittedContigs_ch
+				set contigs, assembly, bam, index from MergedInput_ch
 							
 				output:
 				file "pilonSR*.fasta" into AssemblySplitSR_ch
 			
 				script:
 				"""
-				module load system/Java8
-				
+				module load system/Java8			
 				java -Xmx32G -jar /usr/local/bioinfo/src/Pilon/pilon-v1.22/pilon-1.22.jar --genome ${assembly} --bam ${bam} --fix bases,gaps --changes --output pilonSR${contigs} --targets ${contigs}
 				"""
 			}
-			
-											
+															
 			process fasta_concat {
 				input:
-				file(assembly) from AssemblySplitSR_ch.collect()
+				file fasta from AssemblySplitSR_ch.collect()
 			
 				output:
 				file "assembly.pilon${name}.fa" into PolisherAssemblySR_ch
@@ -612,7 +625,7 @@ if (mode2) {
 				name=iteration_polisherSR.size()
 				final_name = "assembly.pilon"+SR_number+".fa"
 				"""
-				cat ${assembly} > assembly.pilon${name}.fa
+				cat * > assembly.pilon${name}.fa
 				"""
 			}
 		}
@@ -724,8 +737,7 @@ if (mode2) {
 			java -Xmx32G -jar /usr/local/bioinfo/src/Pilon/pilon-v1.22/pilon-1.22.jar --genome ${assembly} --bam map.polisher.sorted.bam --fix bases,gaps --changes --output pilonSR${name}
 			"""
 		}
-	}
-	
+	}	
 	
 /*
 *=======================================================
@@ -760,7 +772,7 @@ if (mode2) {
 	
 /*
 *------------------------------------------------------
-* QUAST QUALITY (abandon, problème variables globale)
+* QUAST QUALITY (problème variables globale)
 *------------------------------------------------------
 */
 // Decommenter + rajouter output AssemblyQuast dans tous les process pour reutiliser
