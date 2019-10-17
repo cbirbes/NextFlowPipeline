@@ -23,7 +23,7 @@ def helpMessage() {
 	=========================================
     Usage:
     The typical command for running the pipeline is as follows:
-    nextflow run polishing --longReads 'longReads.fq.gz' --shortReads '/path/to/DemultiplexData/' --assembly 'assembly.fa'
+    nextflow run polishingPipeline_Main.nf --longReads 'longReads.fq.gz' --shortReads '/path/to/DemultiplexData/' --assembly 'assembly.fa' [options]
 
 	Mandatory arguments:
 		--longReads       Path to long reads fasta or fastq .gz file
@@ -34,41 +34,36 @@ def helpMessage() {
 
 	Options:
 
-		--LRPolish  			Polisher to use for long reads: wtdbg2, racon, pilon, medaka (default value: 'racon')
+		--LRPolish  			Polisher to use with long reads: wtdbg2, racon, pilon, medaka (default value: racon)
 
-		--LRNum	    			Specify the number of long reads polishing to run (default value: 2)
+		--LRNum	    			Number of long reads polishing to run (default value: 2)
 
-    --AlignerExt      Chose aligner extension for racon polishing: 'paf' (.paf reduce quality, improve speed) or 'sam' (default value: 'sam')
+    --AlignerExt      Alignment file extension for polishing with racon: paf (reduce quality, improve speed) or sam (default value: sam)
 
-		--SRPolish	   		Polisher to use for short reads: pilon, racon, freebayes or wtdbg2 (default value: 'pilon')
+		--SRPolish	   		Polisher to use with short reads: pilon, racon, freebayes or wtdbg2 (default value: pilon)
 
-		--SRNum	    			Specify the number of short reads polishing to run (default value: 2)
+		--SRNum	    			Number of short reads polishing to run (default value: 2)
 
-		--NoChanges		   	true : Pilon polishing until there are no more assembly changes (defaults value: false). Overwrite SRPolish and SRNum options
+    --Chunck          Size of targets for parallelization with pilon (default value : 10000000)
 
-		--outdir		    	The output directory where the results will be saved (default value : './results/')
+		--NoChanges		   	If "true", polish until there are no more changes (defaults value: false). Overwrite all short reads options
 
-		--lineage		     	Lineage dataset used for BUSCO (Run Busco quality if set)
+		--Outdir		    	The output directory where the results will be saved (default value : ./results/)
 
-		--species		     	Reference species to built Augustus annotation during BUSCO (default value: 'generic')
+		--Lineage		     	Lineage dataset used for BUSCO (Run Busco quality at the end of the pipeline if set)
 
-    --kat             true : kat evaluation (default value: "false")
+		--Species		     	Reference species to built Augustus annotation during BUSCO (default value: generic)
 
-		--reference			  Reference genome used for Quast comparison
-
-		--genes           Gene and operon annotations used for Quast
-
-		--chunck          Contig length for pilon Parallelization (default value : 10000000)
+    --Kat             If "true" run kat comp at the end of the pipeline (default value: false)
 
 		--SRAligner			  Aligner to use for short reads: samtools or longranger (default value : longranger)
 
-    --poolseqSize     Size of the poolSeq sample
-
-    --pattern         Maximum 0 for freebayes poolseq pattern (Eg: 3 = 0/0/0/1/..../1)
-
     """.stripIndent()
 }
-
+//--reference			  Reference genome used for Quast comparison
+//--genes           Gene and operon annotations used for Quast
+//--poolseqSize     Size of the poolSeq sample
+//--pattern         Maximum 0 for freebayes poolseq pattern (Eg: 3 = 0/0/0/1/..../1)
 
 /*
 *========================================================
@@ -101,18 +96,18 @@ params.SRNum		    = 2
 SR_number				    = params.SRNum
 params.NoChanges		= false
 
-params.outdir			  = './results/'
+params.Outdir			  = './results/'
 
-params.lineage			= false
-params.species			= 'generic'
+params.Lineage			= false
+params.Species			= 'generic'
 
-params.kat          = false
+params.Kat          = false
 
 //params.reference	= false
 //params.genes			= false
 
-params.chunck			  = 10000000
-chunckSize          = Channel.value(params.chunck)
+params.Chunck			  = 10000000
+chunckSize          = Channel.value(params.Chunck)
 
 params.SRAligner		= 'longranger'
 
@@ -120,7 +115,6 @@ params.poolseqSize  = false
 PSS                 = params.poolseqSize
 params.pattern      = false
 Patt                = params.pattern
-
 
 
 //******************************************
@@ -157,12 +151,12 @@ if (!params.assembly) {
 //********************************
 //* Check BUSCO input parameters *
 //********************************
-if (!params.lineage) {
+if (!params.Lineage) {
 	mode3 = false
 } else {
-	Lineage_ch=Channel.fromPath(params.lineage, type: 'dir')
-						.ifEmpty {exit 1, "Assembly file not found: ${params.lineage}"}
-	BUSCOspecies_ch = Channel.value(params.species)
+	Lineage_ch=Channel.fromPath(params.Lineage, type: 'dir')
+						.ifEmpty {exit 1, "Assembly file not found: ${params.Lineage}"}
+	BUSCOspecies_ch = Channel.value(params.Species)
 	mode3 = true
 }
 
@@ -212,10 +206,10 @@ if (!params.NoChanges){
 //**************************
 //* Chunck size evaluation *
 //**************************
-if (params.chunck < 1000000){
+if (params.Chunck < 1000000){
 	exit 1, "Using small chunck is not recommended, try to run pipeline with a chunk size bigger than 1,000,000"
 }
-if (params.chunck > 100000000){
+if (params.Chunck > 100000000){
 	exit 1, "Using big chunck is not recommended, try to run pipeline with a chunk size smaller than 100,000,000"
 }
 
@@ -261,7 +255,7 @@ if (params.pattern != false && params.poolseqSize != false) {
 if (mode1) {
 //* Rename long reads file and add it to channels *
 	process rename_long_reads {
-		publishDir "${params.outdir}"
+		publishDir "${params.Outdir}"
 
 		input:
 		file longreads from LongReads_ch.collect()
@@ -1188,7 +1182,7 @@ if (mode2) {
 //				KAT QUALITY
 //------------------------------------------------------
 
-  if (params.kat && mode2){
+  if (params.Kat && mode2){
     process katSR {
       label 'katSR'
 
@@ -1208,7 +1202,7 @@ if (mode2) {
     }
   }
 
-  if (params.kat && mode1){
+  if (params.Kat && mode1){
     if (!mode2) {
   		FinalPolisherAssembly_ch.set{AssemblyKat2_ch}
   	}

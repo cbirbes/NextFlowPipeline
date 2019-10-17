@@ -3,15 +3,10 @@ This nextflow pipeline is an assembly polishing pipeline available for short and
 It use several tools like pilon, racon, medaka, freebayes or wtdbg2.
 To use it, you need at least an initial assembly and short and / or long reads.
 
-## Getting Started
-
-git clone https://github.com/Clement-BIRBES/NextFlowPipeline.git
-cp NextFlowPipeline/* /path/to/your/working/directory
-
 ## Parameters
 Usage:
 The typical command for running the pipeline is as follows:
-nextflow run polishing --longReads 'longReads.fq.gz' --shortReads '/path/to/DemultiplexData/' --assembly 'assembly.fa'
+nextflow run polishingPipeline_Main.nf --longReads 'longReads.fq.gz' --shortReads '/path/to/DemultiplexData/' --assembly 'assembly.fa' [options]
 
 Mandatory arguments:
 --longReads       Path to long reads fasta or fastq .gz file
@@ -22,34 +17,26 @@ Mandatory arguments:
 
 Options:
 
---LRPolish  			Polisher to use for long reads: wtdbg2, racon, pilon, medaka (default value: 'racon')
+--LRPolish  			Polisher to use with long reads: wtdbg2, racon, pilon, medaka (default value: racon)
 
---LRNum	    			Specify the number of long reads polishing to run (default value: 2)
+--LRNum	    			Number of long reads polishing to run (default value: 2)
 
---AlignerExt      Chose aligner extension for racon polishing: 'paf' (.paf reduce quality, improve speed) or 'sam' (default value: 'sam')
+--AlignerExt      Alignment file extension for polishing with racon: paf (reduce quality, improve speed) or sam (default value: sam)
 
---SRPolish	   		Polisher to use for short reads: pilon, racon, freebayes or wtdbg2 (default value: 'pilon')
+--SRPolish	   		Polisher to use with short reads: pilon, racon, freebayes or wtdbg2 (default value: pilon)
 
---SRNum	    			Specify the number of short reads polishing to run (default value: 2)
+--SRNum	    			Number of short reads polishing to run (default value: 2)
 
---NoChanges		   	true : Pilon polishing until there are no more assembly changes (defaults value: false). Overwrite SRPolish and SRNum options
+--Chunck          Size of targets for parallelization with pilon (default value : 10000000)
 
---outdir		    	The output directory where the results will be saved (default value : './results/')
+--NoChanges		   	If "true", polish until there are no more changes (defaults value: false). Overwrite all short reads options
 
---lineage		     	Lineage dataset used for BUSCO (Run Busco quality if set)
+--Outdir		    	The output directory where the results will be saved (default value : ./results/)
 
---species		     	Reference species to built Augustus annotation during BUSCO (default value: 'generic')
+--Lineage		     	Lineage dataset used for BUSCO (Run Busco quality at the end of the pipeline if set)
 
---kat             true : kat evaluation (default value: "false")
+--Species		     	Reference species to built Augustus annotation during BUSCO (default value: generic)
 
---reference			  Reference genome used for Quast comparison
-
---genes           Gene and operon annotations used for Quast
-
---chunck          Contig length for pilon Parallelization (default value : 10000000)
+--Kat             If "true" run kat comp at the end of the pipeline (default value: false)
 
 --SRAligner			  Aligner to use for short reads: samtools or longranger (default value : longranger)
-
---poolseqSize     Size of the poolSeq sample
-
---pattern         Maximum 0 for freebayes poolseq pattern (Eg: 3 = 0/0/0/1/..../1)
