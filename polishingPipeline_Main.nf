@@ -616,7 +616,7 @@ if (mode2) {
 				shell:
 				'''
 				module load system/Python-3.6.3
-				python3.6 ../../../FastaSplit.py --fasta !{assembly} --length !{length}
+				FastaSplit.py --fasta !{assembly} --length !{length}
 				'''
 			}
 
@@ -656,7 +656,7 @@ if (mode2) {
 				final_name = "assembly.pilon"+SR_number+".fa"
 				"""
 				module load system/Python-3.6.3
-				python3.6 ../../../FastaConcat.py --length ${length}
+				FastaConcat.py --length ${length}
 				mv pilonOut.fa assembly.pilon${name}.fa
 				"""
 			}
@@ -751,7 +751,7 @@ if (mode2) {
 					shell:
 					'''
 					module load system/Python-3.6.3
-					python3.6 ../../../FastaSplit.py --fasta !{assembly} --length !{length}
+					FastaSplit.py --fasta !{assembly} --length !{length}
 					'''
 				}
 
@@ -791,7 +791,7 @@ if (mode2) {
 					final_name = "assembly.pilon"+SR_number+".fa"
 					"""
 					module load system/Python-3.6.3
-					python3.6 ../../../FastaConcat.py --length ${length}
+					FastaConcat.py --length ${length}
 					mv pilonOut.fa assembly.pilon${name}.fa
 					"""
 				}
@@ -886,7 +886,7 @@ if (mode2) {
   					shell:
   					'''
   					module load system/Python-3.6.3
-  					python3.6 ../../../FastaSplit.py --fasta !{assembly} --length !{length}
+  					FastaSplit.py --fasta !{assembly} --length !{length}
   					'''
   				}
 
@@ -926,7 +926,7 @@ if (mode2) {
   					final_name = "assembly.pilon"+SR_number+".fa"
   					"""
   					module load system/Python-3.6.3
-  					python3.6 ../../../FastaConcat.py --length ${length}
+  					FastaConcat.py --length ${length}
   					mv pilonOut.fa assembly.pilon${name}.fa
   					"""
   				}
