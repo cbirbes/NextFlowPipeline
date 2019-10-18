@@ -1,3 +1,5 @@
+#!/bin/env python
+
 import argparse
 
 parser = argparse.ArgumentParser(description='Description of your program')
