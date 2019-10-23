@@ -158,7 +158,7 @@ if (!params.assembly) {
 if (params.lineage) {
   Lineage_ch=Channel.fromPath(params.lineage, type: 'dir')
 						.ifEmpty {exit 1, "Assembly file not found: ${params.lineage}"}
-            .into {LineageSR_ch; LineageLR_ch}
+            .into {LineageSR_ch; LineageLR_ch; LineageSR1_ch; LineageSR2_ch; LineageSR3_ch}
 	BUSCOspecies_ch = Channel.value(params.species)
 	mode3 = true
 } else {
@@ -675,6 +675,29 @@ if (mode2) {
 				"""
 			}
 
+      if (params.allSteps){
+        process buscoPilon1 {
+    			label 'busco'
+
+    			input:
+    			file assembly from AssemblyBuscoSR1_ch
+    			file lineage from LineageSR1_ch.collect()
+    			val species from BUSCOspecies_ch
+
+    			output:
+    			file "run_BuscoSR${name}" into busco_first_assemblySR1_ch
+
+    			script:
+    			name = iteration_polisherSR.size()
+    			"""
+    			module load system/Python-3.6.3
+    			module load bioinfo/augustus-3.3
+    			module load bioinfo/busco-3.0.2
+    			python3 /usr/local/bioinfo/src/BUSCO/busco-3.0.2/scripts/run_BUSCO.py -c 8 -i ${assembly} -l ${lineage} -m geno --limit 10 -o BuscoSR${name} -sp ${species}
+    			"""
+    		}
+      }
+
 
 //LOOP TWO #################################################################################################################################
 			if (params.srNum >= 2) {
@@ -812,6 +835,29 @@ if (mode2) {
 					"""
 				}
 
+        if (params.allSteps){
+          process buscoPilon2 {
+      			label 'busco'
+
+      			input:
+      			file assembly from AssemblyBuscoSR2_ch
+      			file lineage from LineageSR2_ch.collect()
+      			val species from BUSCOspecies_ch
+
+      			output:
+      			file "run_BuscoSR${name}" into busco_first_assemblySR2_ch
+
+      			script:
+      			name = iteration_polisherSR.size()
+      			"""
+      			module load system/Python-3.6.3
+      			module load bioinfo/augustus-3.3
+      			module load bioinfo/busco-3.0.2
+      			python3 /usr/local/bioinfo/src/BUSCO/busco-3.0.2/scripts/run_BUSCO.py -c 8 -i ${assembly} -l ${lineage} -m geno --limit 10 -o BuscoSR${name} -sp ${species}
+      			"""
+      		}
+        }
+
 
 // LOOP THREE #################################################################################################################################
   			if (params.srNum >= 3) {
@@ -948,6 +994,29 @@ if (mode2) {
   					mv pilonOut.fa assembly.pilon${name}.fa
   					"""
   				}
+
+          if (params.allSteps){
+            process buscoPilon3 {
+        			label 'busco'
+
+        			input:
+        			file assembly from AssemblyBuscoSR3_ch
+        			file lineage from LineageSR3_ch.collect()
+        			val species from BUSCOspecies_ch
+
+        			output:
+        			file "run_BuscoSR${name}" into busco_first_assemblySR3_ch
+
+        			script:
+        			name = iteration_polisherSR.size()
+        			"""
+        			module load system/Python-3.6.3
+        			module load bioinfo/augustus-3.3
+        			module load bioinfo/busco-3.0.2
+        			python3 /usr/local/bioinfo/src/BUSCO/busco-3.0.2/scripts/run_BUSCO.py -c 8 -i ${assembly} -l ${lineage} -m geno --limit 10 -o BuscoSR${name} -sp ${species}
+        			"""
+        		}
+          }
           AssemblySR3_ch.into{AssemblyKat_ch; AssemblyKat2_ch; AssemblyBuscoFinal_ch}
 			  } else { AssemblySR2_ch.into{AssemblyKat_ch; AssemblyKat2_ch; AssemblyBuscoFinal_ch}}
       } else { AssemblySR1_ch.into{AssemblyKat_ch; AssemblyKat2_ch; AssemblyBuscoFinal_ch}}
@@ -1221,16 +1290,8 @@ if (mode3){
 		}
   }
 
-  if (params.allSteps && mode2){
-    if (params.srPolish == "pilon" && !params.noChanges){
-      AssemblyBuscoSR1_ch=Channel.create()
-      AssemblyBuscoSR2_ch=Channel.create()
-      AssemblyBuscoSR3_ch=Channel.create()
-      AssemblyBuscoSR1_ch.mix(AssemblyBuscoSR2_ch, AssemblyBuscoSR3_ch)
-                      .set{AssemblyBuscoSR_ch}
-    }
-
-		process buscoSRAllSteps {
+  if (params.allSteps && mode2 && params.srPolish != 'pilon'){
+    process buscoSRAllSteps {
 			label 'busco'
 
 			input:
