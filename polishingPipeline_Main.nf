@@ -19,7 +19,7 @@
 def helpMessage() {
     log.info"""
 	=========================================
-	    Assembly polishing Pipeline v0.1
+	    Assembly polishing Pipeline v1.1
 	=========================================
     Usage:
     The typical command for running the pipeline is as follows:

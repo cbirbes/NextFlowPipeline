@@ -28,18 +28,19 @@ def helpMessage() {
 	Mandatory arguments:
 		--longReads       Path to long reads fasta or fastq .gz file
       	 AND/OR
-		--shortReads      Path to demultiplexed 10X short reads directory
+		--shortReads      Path to short reads directory (For best performance, prefer 2 reads files/directory)
 
 		--assembly        Fasta file of genome assembly to polish
 
 	Options:
-
+  Long Reads options :
 		--lrPolish  			Polisher to use with long reads: wtdbg2, racon, pilon, medaka (default value: racon)
 
 		--lrNum	    			Number of long reads polishing to run (default value: 2)
 
     --alignerExt      Alignment file extension for polishing with racon: paf (reduce quality, improve speed) or sam (default value: sam)
 
+  Short Reads options :
 		--srPolish	   		Polisher to use with short reads: pilon, racon, freebayes or wtdbg2 (default value: pilon)
 
 		--srNum	    			Number of short reads polishing to run (default value: 2)
@@ -50,9 +51,14 @@ def helpMessage() {
 
     --srAligner			  Aligner to use for short reads: bwa or longranger (default value : longranger). For bwa precise the entire path to the reads, for samtools precise the directory containing the reads.
 
-		--outdir		    	The output directory where the results will be saved (default value : ./results/)
+    --sample          If using "--srAligner longranger" and a directory containing more than 2 reads files, precise the prefix of reads to analyse (--sample option from longranger align)
 
-		--lineage		     	Lineage dataset used for BUSCO (Run Busco quality at the end of the pipeline if set)
+    --poolseqSize     Size of the poolSeq sample for poolSeq analysis
+
+    --pattern         Maximum 0 for freebayes poolseq pattern (Eg: 3 = 0/0/0/1/..../1), for poolSeq analysis
+
+  Analysis and metrics options :
+		--lineage		     	Lineage dataset used for BUSCO (if set : Run Busco quality after the last short reads polishing step)
 
 		--species		     	Reference species to built Augustus annotation during BUSCO steps (default value: generic)
 
@@ -60,9 +66,8 @@ def helpMessage() {
 
     --kat             If "true" run kat comp at the end of the pipeline (default value: false) for both long reads and short reads.
 
-    --poolseqSize     Size of the poolSeq sample
-
-    --pattern         Maximum 0 for freebayes poolseq pattern (Eg: 3 = 0/0/0/1/..../1)
+  Output option :
+    --outdir		    	The output directory where the results will be saved (default value : ./results/)
 
     """.stripIndent()
 }
@@ -71,9 +76,9 @@ def helpMessage() {
 
 
 /*
-*========================================================
+*========================================
 *= 					SET UP CONFIGURATIONS				=
-*========================================================
+*========================================
 **********************************************
 //* Show help message if --help is specified *
 **********************************************
@@ -103,6 +108,7 @@ params.srAligner		= 'longranger'
 params.chunck			  = 10000000
 chunckSize          = Channel.value(params.chunck)
 params.noChanges		= false
+params.sample      = false
 
 params.outdir			  = './results/'
 
@@ -183,9 +189,9 @@ if (params.lrNum.getClass() == Integer) {
 }
 
 
-//****************************************
-//* If NoChanges option is NOT specified *
-//****************************************
+//********************************************************
+//* Params setting and checking without noChanges option *
+//********************************************************
 if (!params.noChanges){
 //*************************************
 //* Check consistency of SR Polishing *
@@ -205,18 +211,26 @@ if (!params.noChanges){
 	} else if (params.srNum.getClass() != Integer) {
 		exit 3, "Option --srNum must be an integer : ${params.srNum}"
 	}
-}
 
-if (params.srAligner != 'longranger' && params.srAligner != 'bwa'){
-  exit 1, "Option --srAligner must be longranger or bwa"
+//* Sample option for longranger
+  if (params.srAligner != 'longranger' && params.srAligner != 'bwa'){
+    exit 1, "Option --srAligner must be longranger or bwa"
+  }
   if (params.srAligner == 'longranger' && params.sample) {
     param = '--sample='
-	  Sample=Channel.value(param.concat(params.sample))
+    Sample=Channel.value(param.concat(params.sample))
   }
   else {
     Sample=Channel.value('')
   }
+
+  if (params.srAligner == 'longranger' && params.srPolish == 'racon'){
+    exit 1, "Incompatible srAligner (${params.srAligner}) and srPolish (${params.srPolish}) combinaison, try bwa as aligner or an other polisher"
+  }
+
+
 }
+
 
 //**************************
 //* Chunck size evaluation *
@@ -263,11 +277,22 @@ if (params.pattern != false && params.poolseqSize != false) {
 *========================================================
 * 				LONG READS POLISHING PART
 *========================================================
-*********************************
-//* If Long reads are specified *
-*********************************
+* If Long reads are given *
 */
 if (mode1) {
+//* Create iteration condition, PolisherAssembly channel and the loop for multiple polish using long reads *
+	iteration_polisherLR=[]
+	condition = { iteration_polisherLR.size()<LR_number ? it : Channel.STOP }
+
+	PolisherAssembly_ch = Channel.create()
+
+	Assembly_ch.mix(PolisherAssembly_ch.map(condition))
+			.into{AssemblyMinimap_ch; AssemblyPolisher_ch}
+//****************
+//* PROCESS PART *
+//****************
+
+
 //* Rename long reads file and add it to channels *
 	process rename_long_reads {
 		publishDir "${params.outdir}"
@@ -290,19 +315,8 @@ if (mode1) {
 		}
 	}
 
-
-//* Create iteration condition, PolisherAssembly channel and the loop for multiple polish using long reads *
-	iteration_polisherLR=[]
-	condition = { iteration_polisherLR.size()<LR_number ? it : Channel.STOP }
-
-	PolisherAssembly_ch = Channel.create()
-
-	Assembly_ch.mix( PolisherAssembly_ch.map(condition) )
-			.into{AssemblyMinimap_ch; AssemblyPolisher_ch}
-
-
+//* Map long reads to assembly using Minimap2 with .sam output extension *
 	if (params.lrPolish != "racon" || params.alignerExt == "sam" ){
-//* Map long reads to assembly using Minimap2 for Pilon, Medaka and wtdbg2 only *
 		process minimapLR {
 			label 'minimap'
 
@@ -321,8 +335,8 @@ if (mode1) {
 		}
 	}
 
+//* Map long reads to assembly using Minimap2 with .paf output extension (Racon only) *
   if (params.lrPolish == "racon" && params.alignerExt == "paf" ) {
-  //* Map long reads to assembly using Minimap2 for Racon only *
     process minimapRac {
       label 'minimap'
 
@@ -341,13 +355,31 @@ if (mode1) {
     }
   }
 
+//* Convert .sam file to .sorted.bam file for pilon and wtdbg2
+  if (params.lrPolish == "wtdbg2" || params.lrPolish == "pilon"){
+    process samtoolsLR {
+      label 'samtools'
+      input:
+      file map from MapMinimap_ch
+
+      output:
+      set file("map.polisher.sorted.bam"), file("map.polisher.sorted.bam.bai") into MapSamtoolsLR_ch
+
+      script:
+      """
+      module load bioinfo/samtools-1.4
+      samtools view -S -b ${map} > map.polisher.bam
+      samtools sort map.polisher.bam -o map.polisher.sorted.bam
+      samtools index map.polisher.sorted.bam
+      """
+    }
+  }
+
 /*
 *------------------------------------------------------
 *					POLISHING WITH RACON
 *------------------------------------------------------
-**********************************************************************************
-//* If LRPolish = racon, start polishing the assembly using racon and long reads *
-**********************************************************************************
+* If lrPolish = racon, start polishing the assembly using racon and long reads *
 */
 	if (params.lrPolish == "racon" ){
 		process raconLR {
@@ -377,9 +409,7 @@ if (mode1) {
 *------------------------------------------------------
 *					POLISHING WITH WTDBG2
 *------------------------------------------------------
-************************************************************************************
-//* If LRPolish = wtdbg2, start polishing the assembly using wtdbg2 and long reads *
-************************************************************************************
+* If LRPolish = wtdbg2, start polishing the assembly using wtdbg2 and long reads *
 */
 	if (params.lrPolish == "wtdbg2"){
 		process wtdbg2LR {
@@ -388,7 +418,7 @@ if (mode1) {
 			input:
 			file reads from LongReadsPolisher_ch
 			file assembly from AssemblyPolisher_ch
-			file map from MapMinimap_ch
+			set map, index from MapSamtoolsLR_ch
 
 			output:
 			file "assembly.wtdbg2${name}.fa" into PolisherAssembly_ch, AssemblyBuscoLR_ch
@@ -399,11 +429,8 @@ if (mode1) {
 			name = iteration_polisherLR.size()
 			final_name="assembly.wtdbg2"+LR_number+".fa"
 			"""
-			module load bioinfo/samtools-1.9
 			module load bioinfo/wtdbg2-2.3
-
-			samtools sort -@4 ${map} > sorted.bam
-			samtools view -F0x900 sorted.bam | wtpoa-cns -t 32 -d ${assembly} -i - -fo assembly.wtdbg2${name}.fa
+			samtools view -F0x900 ${map} | wtpoa-cns -t 32 -d ${assembly} -i - -fo assembly.wtdbg2${name}.fa
 			"""
 		}
 	}
@@ -412,9 +439,7 @@ if (mode1) {
 *------------------------------------------------------
 *					POLISHING WITH PILON
 *------------------------------------------------------
-**********************************************************************************
-//* If LRPolish = pilon, start polishing the assembly using pilon and long reads *
-**********************************************************************************
+* If LRPolish = pilon, start polishing the assembly using pilon and long reads *
 */
 	if (params.lrPolish == "pilon"){
 		process pilonLR {
@@ -422,7 +447,7 @@ if (mode1) {
 
 			input:
 			file assembly from AssemblyPolisher_ch
-			file map from MapMinimap_ch
+			set map, index from MapSamtoolsLR_ch
 
 			output:
 			file "assembly.pilon${name}.fa" into PolisherAssembly_ch, AssemblyBuscoLR_ch
@@ -433,14 +458,9 @@ if (mode1) {
 			name = iteration_polisherLR.size()
 			final_name="assembly.pilon"+LR_number+".fa"
 			"""
-			module load bioinfo/samtools-1.4
 			module load bioinfo/pilon-v1.22
 			module load system/Java8
-
-			samtools view -S -b ${map} > map.polisher.bam
-			samtools sort map.polisher.bam -o map.polisher.sorted.bam
-			samtools index map.polisher.sorted.bam
-			java -Xmx32G -jar /usr/local/bioinfo/src/Pilon/pilon-v1.22/pilon-1.22.jar --genome ${assembly} --bam map.polisher.sorted.bam --fix bases,gaps --changes --output pilon${name}
+			java -Xmx32G -jar /usr/local/bioinfo/src/Pilon/pilon-v1.22/pilon-1.22.jar --genome ${assembly} --bam ${map} --fix bases,gaps --changes --output pilon${name}
 			"""
 		}
 	}
@@ -449,9 +469,7 @@ if (mode1) {
 *------------------------------------------------------
 *					POLISHING WITH MEDAKA
 *------------------------------------------------------
-************************************************************************************
-//* If LRPolish = medaka, start polishing the assembly using medaka and long reads *
-************************************************************************************
+* If LRPolish = medaka, start polishing the assembly using medaka and long reads *
 */
 	if (params.lrPolish == "medaka"){
 		process medakaLR {
@@ -483,27 +501,26 @@ if (mode1) {
 
 
 
+
+
 /*
 *=======================================================
 * 				SHORT READS POLISHING PART
 *=======================================================
-*********************************
-//* If Long reads are specified *
-*********************************
+* If Short reads are given *
 */
 if (mode2) {
+//* Create iteration condition, PolisherAssemblySR channel, split reads into multiple channels and the loop for multiple polish using short reads *
 	ShortReads_ch.collect().into{ShortReadsAligner_ch; ShortReadsAligner2_ch; ShortReadsAligner3_ch; ShortReadsPolisher_ch; ShortReadsQuast_ch; ShortReadsKat_ch}
-
-//* Create iteration condition, PolisherAssemblySR channel and the loop for multiple polish using short reads *
-//* Different condition if Params.NoChanges specified, to loop over process until the assembly don't change *
 	iteration_polisherSR=[]
 	PolisherAssemblySR_ch = Channel.create()
 
-//* If no long reads detected, starting first polishing with short reads *
+//* If no long reads detected, start first polishing with short reads, using initial given assembly *
 	if (!mode1) {
 		FinalPolisherAssembly_ch=Assembly_ch
 	}
 
+//* Create different condition if Params.NoChanges specified, to loop over process until the assembly don't change *
 	if (params.noChanges){
 		FinalPolisherAssembly_ch.mix(PolisherAssemblySR_ch)
 							.into{AssemblyBwa_ch; AssemblyPolisher_ch}
@@ -512,14 +529,20 @@ if (mode2) {
 		PolisherChangesSR_ch.mix(PolisherChangesSR2_ch)
 							.until{it.size()==0}
 							.set{PolisherChangesSRFinal_ch}
-
-	} else if (params.srPolish != "pilon") {
+	}
+//* If we polish without using pilon *
+  else if (params.srPolish != "pilon") {
 		condition = { iteration_polisherSR.size()<SR_number ? it : Channel.STOP }
 		FinalPolisherAssembly_ch.mix(PolisherAssemblySR_ch.map(condition))
 							.into{AssemblyBwa_ch; AssemblyPolisher_ch; AssemblyPolisherVCF_ch; Assembly4Longranger_ch}
-	} else {
+	}
+//* If we polish with pilon without noChanges option *
+  else {
 		FinalPolisherAssembly_ch.into{AssemblyBwa_ch; AssemblyPolisher_ch; AssemblyDivide_ch; Assembly4Longranger_ch}
 	}
+//****************
+//* PROCESS PART *
+//****************
 
 
 //* Map short reads to assembly using bwa-mem *
@@ -536,15 +559,69 @@ if (mode2) {
 
 			script:
 			"""
-			module load bioinfo/samtools-1.4
 			module load bioinfo/bwa-0.7.17
 			bwa index ${assembly}
 			bwa mem -t 8 ${assembly} ${reads} >  map.polisher.sam
 			"""
 		}
+
+//* Convert .sam file to .sorted.bam file for polishers (except racon)
+    if (params.srPolish != "racon"){
+      process samtoolsSR{
+        label 'samtools'
+        input:
+        file map from MapBwa_ch
+
+        output:
+        set file("map.polisher.sorted.bam"), file("map.polisher.sorted.bam.bai") into MapSamtoolsSR_ch
+
+        script:
+        """
+        module load bioinfo/samtools-1.4
+        samtools view -S -b ${map} > map.polisher.bam
+        samtools sort map.polisher.bam -o map.polisher.sorted.bam
+        samtools index map.polisher.sorted.bam
+        """
+      }
+    }
 	}
 
+//* Map short reads to assembly using longranger *
+  if (params.srAligner == "longranger" && params.srPolish != "racon"){
+    process mkref {
+      label 'longranger_mkref'
 
+      input:
+      file assembly from Assembly4Longranger_ch
+
+      output:
+      file 'refdata*' into LongrangerRef_ch
+
+      script:
+      """
+      module load bioinfo/longranger-2.2.2
+      longranger mkref ${assembly}
+      """
+    }
+
+    process align {
+      label 'longranger_align'
+
+      input:
+      file reference from LongrangerRef_ch
+      file reads from ShortReadsAligner_ch
+      val samples from Sample
+
+      output:
+      set file ("ALIGN/outs/possorted_bam.bam"), file ("ALIGN/outs/possorted_bam.bam.bai") into MapSamtoolsSR_ch
+
+      script:
+      """
+      module load bioinfo/longranger-2.2.2
+      longranger align --maxjobs=16 --reference=${reference} --id=ALIGN --fastqs=${reads} ${samples}
+      """
+    }
+  }
 
 /*
 *------------------------------------------------------
@@ -555,68 +632,16 @@ if (mode2) {
 ***************************************************************
 */
 	if (!params.noChanges){
-//*********************************************************************************
-//* If SRPolish = pilon, start polishing the assembly using pilon and short reads *
-//* One block for each polishing. Impossible to loop + parallelize				  *
-//*********************************************************************************
+//*****************************************************************************************
+//* If SRPolish = pilon, start polishing the assembly using pilon and short reads         *
+//* Maximum pilonSR polishing  = 3                                              				  *
+//* If you want to polish more than 3 times with pilon, mail at clement.birbes@inra.fr    *
+//* Or modify the code below by copy pasting LOOP THREE, add +1 to each numbered channels *
+//* and create X more channel ligne 505                                                   *
+//*****************************************************************************************
 
 // LOOP ONE #################################################################################################################################
 		if (params.srPolish == "pilon"){
-			if (params.srAligner == "bwa"){
-				process samtools{
-					label 'samtools'
-					input:
-					file map from MapBwa_ch
-
-					output:
-					set file("map.polisher.sorted.bam"), file("map.polisher.sorted.bam.bai") into MapPilon_ch
-
-					script:
-					"""
-					module load bioinfo/samtools-1.4
-					samtools view -S -b ${map} > map.polisher.bam
-					samtools sort map.polisher.bam -o map.polisher.sorted.bam
-					samtools index map.polisher.sorted.bam
-					"""
-				}
-			}
-
-			if (params.srAligner == "longranger"){
-				process mkref {
-					label 'longranger_mkref'
-
-					input:
-					file assembly from Assembly4Longranger_ch
-
-					output:
-					file 'refdata*' into LongrangerRef_ch
-
-					script:
-					"""
-					module load bioinfo/longranger-2.2.2
-					longranger mkref ${assembly}
-					"""
-				}
-
-				process align {
-					label 'longranger_align'
-
-					input:
-					file reference from LongrangerRef_ch
-					file reads from ShortReadsAligner_ch
-          val samples from Sample
-
-					output:
-					set file ("ALIGN/outs/possorted_bam.bam"), file ("ALIGN/outs/possorted_bam.bam.bai") into MapPilon_ch
-
-					script:
-					"""
-					module load bioinfo/longranger-2.2.2
-					longranger align --maxjobs=16 --reference=${reference} --id=ALIGN --fastqs=${reads} ${samples}
-					"""
-				}
-			}
-
 			process divideContigs{
 				label 'divideContigs'
 				input:
@@ -634,7 +659,7 @@ if (mode2) {
 			}
 
       DividedContigs_ch = ListContigs_ch.splitCsv(sep:";")
-			AssemblyBamIndex_ch = AssemblyPolisher_ch.combine(MapPilon_ch)
+			AssemblyBamIndex_ch = AssemblyPolisher_ch.combine(MapSamtoolsSR_ch)
 			MergedInput_ch = DividedContigs_ch.combine(AssemblyBamIndex_ch)
 
 			process pilonSR {
@@ -715,7 +740,6 @@ if (mode2) {
 
 						script:
 						"""
-						module load bioinfo/samtools-1.4
 						module load bioinfo/bwa-0.7.17
 						bwa index ${assembly}
 						bwa mem -t 8 ${assembly} ${reads} >  map.polisher.sam
@@ -875,7 +899,6 @@ if (mode2) {
 
   						script:
   						"""
-  						module load bioinfo/samtools-1.4
   						module load bioinfo/bwa-0.7.17
   						bwa index ${assembly}
   						bwa mem -t 8 ${assembly} ${reads} >  map.polisher.sam
@@ -1023,17 +1046,11 @@ if (mode2) {
     }
 
 
-//##############################################################################################################################
-//# To get more polishing with pilon, copy one entire loop and change output and input channels (add +1 to each numerotations) #
-//##############################################################################################################################
-
 /*
 *------------------------------------------------------
 *					POLISHING WITH RACON
 *------------------------------------------------------
-***********************************************************************************
-//* If SRPolish = racon, start polishing the assembly using racon and short reads *
-***********************************************************************************
+* If SRPolish = racon, start polishing the assembly using racon and short reads *
 */
 		if (params.srPolish == "racon"){
 			process raconSR {
@@ -1063,9 +1080,7 @@ if (mode2) {
 *------------------------------------------------------
 *					POLISHING WITH WTDBG2
 *------------------------------------------------------
-*************************************************************************************
-//* If SRPolish = wtdbg2, start polishing the assembly using wtdbg2 and short reads *
-*************************************************************************************
+* If SRPolish = wtdbg2, start polishing the assembly using wtdbg2 and short reads *
 */
 		if (params.srPolish == "wtdbg2"){
 			process wtdbg2SR {
@@ -1074,7 +1089,7 @@ if (mode2) {
 				input:
 				file reads from ShortReadsPolisher_ch
 				file assembly from AssemblyPolisher_ch
-				file map from MapBwa_ch
+				set map, index from MapSamtoolsSR_ch
 
 				output:
 				file "assembly.wtdbg2${name}.fa" into PolisherAssemblySR_ch,  AssemblyBuscoSR_ch
@@ -1085,11 +1100,8 @@ if (mode2) {
 				name=iteration_polisherSR.size()
 				final_name = "assembly.wtdbg2"+SR_number+".fa"
 				"""
-				module load bioinfo/samtools-1.9
 				module load bioinfo/wtdbg2-2.3
-
-				samtools sort -@4 ${map} > sorted.bam
-				samtools view -F0x900 sorted.bam | wtpoa-cns -t 32 -d ${assembly} -x sam-sr -fo assembly.wtdbg2${name}.fa
+				samtools view -F0x900 ${map} | wtpoa-cns -t 32 -d ${assembly} -x sam-sr -fo assembly.wtdbg2${name}.fa
 				"""
 			}
 		}
@@ -1100,35 +1112,16 @@ if (mode2) {
 *------------------------------------------------------
 *			POLISHING WITH FREEBAYES VCFTOOLS
 *------------------------------------------------------
-****************************************************************************************************
-//* If SRPolish = freebayes, start polishing the assembly using freebayes vcftools and short reads *
-****************************************************************************************************
+* If SRPolish = freebayes, start polishing the assembly using freebayes vcftools and short reads *
 */
 		if (params.srPolish == "freebayes"){
-
-			process samtoolsFreebayes{
-				label 'samtools'
-				input:
-				file map from MapBwa_ch
-
-				output:
-				set file("map.polisher.sorted.bam"), file("map.polisher.sorted.bam.bai") into MapFreeBayes_ch
-
-				script:
-				"""
-				module load bioinfo/samtools-1.4
-				samtools view -S -b ${map} > map.polisher.bam
-				samtools sort map.polisher.bam -o map.polisher.sorted.bam
-				samtools index map.polisher.sorted.bam
-				"""
-			}
 
 			process freebayes {
 				label 'freebayes'
 
 				input:
 				file assembly from AssemblyPolisher_ch
-				set map, index from MapFreeBayes_ch
+				set map, index from MapSamtoolsSR_ch
 
 				output:
 				file "assemblage.vcf" into vcf_ch
@@ -1139,6 +1132,7 @@ if (mode2) {
 				freebayes -f ${assembly} ${map} > assemblage.vcf
 				"""
 			}
+
       if (params.pattern != false){
 			  process vcftoolsPattern {
 				  label 'vcftools'
@@ -1165,7 +1159,8 @@ if (mode2) {
 				  cat ${assembly} | vcf-consensus assemblage_filtered.vcf.gz > assembly.freebayes${name}.fa
 				  """
 			  }
-      } else {
+      }
+      else {
         process vcftools {
 				  label 'vcftools'
 
@@ -1200,9 +1195,7 @@ if (mode2) {
 *------------------------------------------------------
 *					POLISHING NoChanges
 *------------------------------------------------------
-******************************************************************************************
-//* If NoChanges option = true (Polishing with pilon until no modification are declared) *
-******************************************************************************************
+* If NoChanges option = true (Polishing with pilon until no modification are declared) *
 */
 	else {
 		process pilonNoChanges {
@@ -1210,7 +1203,7 @@ if (mode2) {
 
 			input:
 			file assembly from AssemblyPolisher_ch
-			file map from MapBwa_ch
+			set map, index from MapSamtoolsSR_ch
 			file change from PolisherChangesSRFinal_ch
 
 			output:
@@ -1223,14 +1216,10 @@ if (mode2) {
 			name = iteration_polisherSR.size()
 			final_name = "assembly.pilonSR"+SR_number+".fa"
 			"""
-			module load bioinfo/samtools-1.4
 			module load bioinfo/pilon-v1.22
 			module load system/Java8
 
-			samtools view -S -b ${map} > map.polisher.bam
-			samtools sort map.polisher.bam -o map.polisher.sorted.bam
-			samtools index map.polisher.sorted.bam
-			java -Xmx32G -jar /usr/local/bioinfo/src/Pilon/pilon-v1.22/pilon-1.22.jar --genome ${assembly} --bam map.polisher.sorted.bam --fix bases,gaps --changes --output assembly.pilonSR${name}
+			java -Xmx32G -jar /usr/local/bioinfo/src/Pilon/pilon-v1.22/pilon-1.22.jar --genome ${assembly} --bam ${map} --fix bases,gaps --changes --output assembly.pilonSR${name}
 			"""
 		}
 	}
@@ -1242,6 +1231,7 @@ if (mode2) {
 *------------------------------------------------------
 *					BUSCO QUALITY
 *------------------------------------------------------
+* if lineage is specified, run busco quality after the last short reads polishing step
 */
 if (mode3){
   if (!params.allSteps){
@@ -1267,6 +1257,7 @@ if (mode3){
 		}
   }
 
+//* if params.allSteps = true run busco after each polishing steps
   if (params.allSteps && mode1){
 		process buscoLRAllSteps {
 			label 'busco'
@@ -1290,7 +1281,8 @@ if (mode3){
 		}
   }
 
-  if (params.allSteps && mode2 && params.srPolish != 'pilon'){
+  if (params.allSteps && mode2){
+    AssemblyBuscoSR_ch=Channel.create()
     process buscoSRAllSteps {
 			label 'busco'
 
@@ -1311,6 +1303,7 @@ if (mode3){
 			python3 /usr/local/bioinfo/src/BUSCO/busco-3.0.2/scripts/run_BUSCO.py -c 8 -i ${assembly} -l ${lineage} -m geno --limit 10 -o BuscoSR${name} -sp ${species}
 			"""
 		}
+  AssemblyBuscoSR_ch.close()
   }
 }
 
@@ -1318,7 +1311,7 @@ if (mode3){
 //------------------------------------------------------
 //				KAT QUALITY
 //------------------------------------------------------
-
+//* if params.kat=true run kat at the end of the pipeline (SR and/or LR vs Last available assembly generated by the pipeline.)
 if (params.kat && mode2){
   process katSR {
     label 'katSR'

@@ -1,0 +1,7 @@
+V1.1:
+Possibility to run BUSCO process after each steps of polishing
+Fixed kat -m 21 and -p png options
+Added test files
+Added --sample option for longranger
+Added longranged mapping possibility for all polishers
+Added compatibility contraints (racon + longranger)
