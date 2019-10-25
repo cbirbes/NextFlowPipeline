@@ -26,9 +26,11 @@ To use the pipeline with your own data, it's better to use path to Long reads FI
 
 The default value of the pipeline are the one giving the best results on our training data (E.coli K12 with LongReads wtdbg2 assembly)
 Long reads used: https://www.ebi.ac.uk/ena/data/view/SRR5065181
+
 Short reads used: https://www.ebi.ac.uk/ena/data/view/SRR1706186
 
 ## Parameters
+```
 Usage:
   The typical command for running the pipeline is as follows:
   nextflow run polishingPipeline_Main.nf --longReads 'longReads.fq.gz' --shortReads '/path/to/DemultiplexData/' --assembly 'assembly.fa' [options]
@@ -78,3 +80,4 @@ Analysis and metrics options :
 
 Output option :
   --outdir          The output directory where the results will be saved (default value : ./results/)
+```
