@@ -7,9 +7,9 @@
  #### Authors ####
  Margot ZAHM <margot.zahm@inra.fr>
  Clément BIRBES <clement.birbes@inra.fr>
+ https://github.com/Clement-BIRBES/NextFlowPipeline
 ----------------------------------------------------------------------------------------
 */
-
 /*
 *========================================================
 * 						HELP MESSAGE
@@ -19,11 +19,13 @@
 def helpMessage() {
     log.info"""
 	=========================================
-	    Assembly polishing Pipeline v1.1
+	    Assembly polishing Pipeline v1.2
 	=========================================
-    Usage:
+  Usage:
+
     The typical command for running the pipeline is as follows:
-    nextflow run polishingPipeline_Main.nf --longReads 'longReads.fq.gz' --shortReads '/path/to/DemultiplexData/' --assembly 'assembly.fa' [options]
+    nextflow run main.nf --longReads longReads.fq.gz --shortReads /path/to/DemultiplexData/ --assembly assembly.fa [options]
+
 
 	Mandatory arguments:
 		--longReads       Path to long reads fasta or fastq .gz file
@@ -31,6 +33,7 @@ def helpMessage() {
 		--shortReads      Path to short reads directory (For best performance, prefer 2 reads files/directory)
 
 		--assembly        Fasta file of genome assembly to polish
+
 
 	Options:
   Long Reads options :
@@ -71,17 +74,16 @@ def helpMessage() {
 
     """.stripIndent()
 }
-//--reference			  Reference genome used for Quast comparison
-//--genes           Gene and operon annotations used for Quast
+
 
 
 /*
 *========================================
-*= 					SET UP CONFIGURATIONS				=
+*=    SET UP CONFIGURATION VARIABLES		=
 *========================================
-**********************************************
-//* Show help message if --help is specified *
-**********************************************
+************************
+//* Show help message  *
+************************
 */
 params.help = false
 if (params.help){
@@ -122,9 +124,6 @@ params.poolseqSize  = false
 PSS                 = params.poolseqSize
 params.pattern      = false
 Patt                = params.pattern
-
-//params.reference	= false
-//params.genes			= false
 
 
 //******************************************
@@ -260,23 +259,13 @@ if (params.pattern != false && params.poolseqSize != false) {
 }
 
 
-//*************************************************************
-//* If Quast imput are specified A REVOIR PB VARIABLE GLOBALE *
-//*************************************************************
-//if (params.reference && params.genes) {
-//	Ref=Channel.fromPath(params.reference)
-//	                 .ifEmpty {exit 2, "Reference genome file not found: ${params.reference}"}
-//	GeneAnnot=Channel.fromPath(params.genes)
-//				.ifEmpty {exit 2, "Gene and operon annotations file not found: ${params.genes}"}
-//	mode4=true
-//} else { mode4=false }
-
-
-
 /*
 *========================================================
 * 				LONG READS POLISHING PART
 *========================================================
+//**********************
+//* CONFIGURATION PART *
+//**********************
 * If Long reads are given *
 */
 if (mode1) {
@@ -288,11 +277,11 @@ if (mode1) {
 
 	Assembly_ch.mix(PolisherAssembly_ch.map(condition))
 			.into{AssemblyMinimap_ch; AssemblyPolisher_ch}
+
+
 //****************
 //* PROCESS PART *
 //****************
-
-
 //* Rename long reads file and add it to channels *
 	process rename_long_reads {
 		publishDir "${params.outdir}"
@@ -507,11 +496,14 @@ if (mode1) {
 *=======================================================
 * 				SHORT READS POLISHING PART
 *=======================================================
+//**********************
+//* CONFIGURATION PART *
+//**********************
 * If Short reads are given *
 */
 if (mode2) {
 //* Create iteration condition, PolisherAssemblySR channel, split reads into multiple channels and the loop for multiple polish using short reads *
-	ShortReads_ch.collect().into{ShortReadsAligner_ch; ShortReadsAligner2_ch; ShortReadsAligner3_ch; ShortReadsPolisher_ch; ShortReadsQuast_ch; ShortReadsKat_ch}
+	ShortReads_ch.collect().into{ShortReadsAligner_ch; ShortReadsAligner2_ch; ShortReadsAligner3_ch; ShortReadsPolisher_ch; ShortReadsKat_ch}
 	iteration_polisherSR=[]
 	PolisherAssemblySR_ch = Channel.create()
 
@@ -524,7 +516,7 @@ if (mode2) {
 	if (params.noChanges){
 		FinalPolisherAssembly_ch.mix(PolisherAssemblySR_ch)
 							.into{AssemblyBwa_ch; AssemblyPolisher_ch}
-		PolisherChangesSR_ch=Channel.fromPath('polishingPipeline_Main.nf')
+		PolisherChangesSR_ch=Channel.fromPath('main.nf')
 		PolisherChangesSR2_ch=Channel.create()
 		PolisherChangesSR_ch.mix(PolisherChangesSR2_ch)
 							.until{it.size()==0}
@@ -540,11 +532,11 @@ if (mode2) {
   else {
 		FinalPolisherAssembly_ch.into{AssemblyBwa_ch; AssemblyPolisher_ch; AssemblyDivide_ch; Assembly4Longranger_ch}
 	}
+
+
 //****************
 //* PROCESS PART *
 //****************
-
-
 //* Map short reads to assembly using bwa-mem *
 	if (params.srAligner == "bwa"){
 		process bwa_mem {
@@ -618,7 +610,7 @@ if (mode2) {
       script:
       """
       module load bioinfo/longranger-2.2.2
-      longranger align --maxjobs=16 --reference=${reference} --id=ALIGN --fastqs=${reads} ${samples}
+      longranger align --reference=${reference} --id=ALIGN --fastqs=${reads} --localcores=20 --localmem=64 ${samples}
       """
     }
   }
@@ -796,7 +788,7 @@ if (mode2) {
 						script:
 						"""
 						module load bioinfo/longranger-2.2.2
-						longranger align --maxjobs=16 --reference=${reference} --id=ALIGN --fastqs=${reads} ${samples}
+						longranger align --maxjobs=16 --reference=${reference} --id=ALIGN --fastqs=${reads} --localcores=20 --localmem=64 ${samples}
 						"""
 					}
 				}
@@ -955,7 +947,7 @@ if (mode2) {
   						script:
   						"""
   						module load bioinfo/longranger-2.2.2
-  						longranger align --maxjobs=16 --reference=${reference} --id=ALIGN --fastqs=${reads} ${samples}
+  						longranger align --maxjobs=16 --reference=${reference} --id=ALIGN --fastqs=${reads} --localcores=20 --localmem=64 ${samples}
   						"""
   					}
   				}
@@ -1354,39 +1346,3 @@ if (params.kat && mode1){
     """
   }
 }
-
-
-
-/*
-*------------------------------------------------------
-* QUAST QUALITY (problème variables globale)
-*------------------------------------------------------
-*/
-// Decommenter + rajouter output AssemblyQuast dans tous les process pour reutiliser
-//		process quast {
-//			label 'quast'
-//
-//			input:
-//			file assembly from AssemblyQuast
-//			file reference from Ref
-//			file genes from GeneAnnot
-//			file reads from ShortReadsQuast
-//
-//			output:
-//			file "quast${name}_output" into Quast_ComparisonSR
-//
-//			script:
-//			name = iteration_polisherSR.size()
-//			"""
-//			source /usr/local/bioinfo/src/QUAST/quast-5.0.0rc1_env/bin/activate
-//			export _OLD_VIRTUAL_PATH=\${_OLD_VIRTUAL_PATH:-''}
-//			export _OLD_VIRTUAL_PYTHONHOME=\${_OLD_VIRTUAL_PYTHONHOME:-''}
-//			export _OLD_VIRTUAL_PS1=\${_OLD_VIRTUAL_PS1:-''}
-//			export ZSH_VERSION=\${ZSH_VERSION:-''}
-//			export VIRTUAL_ENV_DISABLE_PROMPT=\${VIRTUAL_ENV_DISABLE_PROMPT:-''}
-//			module load system/R-3.4.3
-//			module load bioinfo/quast-5.0.0rc1
-//			quast.py ${assembly} -R ${reference} -g ${genes} --single ${reads} -o quast${name}_output
-//			"""
-//		}
-//	}

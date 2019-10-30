@@ -1,3 +1,8 @@
+V1.2:
+Longranger run amelioration with --localmem and --localcores options
+rename nextflow file to main.nf
+improved commentary
+
 V1.1:
 Possibility to run BUSCO process after each steps of polishing
 Fixed kat -m 21 and -p png options
