@@ -1,3 +1,8 @@
+V1.3:
+Run up to 1500 simultaneous jobs on cluster (15x faster pilon steps)
+Optimisation ressources RaconLR PilonSR longranger
+
+
 V1.2:
 Longranger run amelioration with --localmem and --localcores options
 rename nextflow file to main.nf
