@@ -1,7 +1,9 @@
 V1.3:
 Run up to 1500 simultaneous jobs on cluster (15x faster pilon steps)
-Optimisation ressources RaconLR PilonSR longranger
-
+Ressources optimisation for RaconLR, PilonSR, longranger
+Improved queue choices for different process
+Deleted PILON_SR_CONCAT publishDir, moved to PILON_SR
+Corrected bugs for contigs deleted by racon
 
 V1.2:
 Longranger run amelioration with --localmem and --localcores options

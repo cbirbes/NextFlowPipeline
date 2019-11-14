@@ -16,24 +16,30 @@ cmd = "sed -i '1d' *.fasta"
 os.system(cmd)
 
 y=1
+x=1
 
 ListFile=[f for f in os.listdir('.')]
+len1=len(ListFile)
 
-for x in range (1, len(ListFile)):
+
+
+while (x <= len1):
 	y=1
 	if (path.exists("pilonSRctg"+str(x)+".fasta")):
 		y=1
 	else:
-			with open("pilonSRctg"+str(x)+".fasta","a") as a1:
-				while (glob.glob("pilonSRctg"+str(x)+":"+str(y)+"-*.fasta")):
-					with open(glob.glob("pilonSRctg"+str(x)+":"+str(y)+"-*.fasta")[0],"r") as a:
-						for line in a:
-							a1.write(line)
-						a.close()
-						y+=int(chunck)
-				a1.close()
+		len1+=1
+		with open("pilonSRctg"+str(x)+".fasta","a") as a1:
+			while (glob.glob("pilonSRctg"+str(x)+":"+str(y)+"-*.fasta")):
+				with open(glob.glob("pilonSRctg"+str(x)+":"+str(y)+"-*.fasta")[0],"r") as a:
+					for line in a:
+						a1.write(line)
+					a.close()
+					y+=int(chunck)
+			a1.close()
+			x+=1
 
-for x in range(1, len(ListFile)):
+for x in range(1, len1+1):
 	if (path.exists("pilonSRctg"+str(x)+".fasta")):
 		with open("pilonSRctg"+str(x)+".fasta", 'r') as f:
 			LenFile=0
