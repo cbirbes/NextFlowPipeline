@@ -23,14 +23,17 @@ len1=len(ListFile)
 
 
 
-while (x <= len1):
+while (x < len1):
 	y=1
 	if (path.exists("pilonSRctg"+str(x)+".fasta")):
+		print (path.exists("pilonSRctg"+str(x)+".fasta"))
 		y=1
+		x+=1
 	else:
 		len1+=1
 		with open("pilonSRctg"+str(x)+".fasta","a") as a1:
 			while (glob.glob("pilonSRctg"+str(x)+":"+str(y)+"-*.fasta")):
+				len1-=1
 				with open(glob.glob("pilonSRctg"+str(x)+":"+str(y)+"-*.fasta")[0],"r") as a:
 					for line in a:
 						a1.write(line)
