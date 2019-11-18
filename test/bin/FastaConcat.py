@@ -18,15 +18,18 @@ os.system(cmd)
 y=1
 x=1
 
-ListFile=[f for f in os.listdir('.')]
+items = os.listdir(".")
+ListFile=[]
+for names in items:
+	if names.endswith(".fasta"):
+		ListFile.append(names)
 len1=len(ListFile)
 
 
 
-while (x < len1):
+while (x <= len1):
 	y=1
 	if (path.exists("pilonSRctg"+str(x)+".fasta")):
-		print (path.exists("pilonSRctg"+str(x)+".fasta"))
 		y=1
 		x+=1
 	else:
