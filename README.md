@@ -7,7 +7,7 @@ To use this pipeline, you need at least an initial assembly and short and/or lon
 
 ```
 git clone --recursive https://github.com/Clement-BIRBES/NextFlowPipeline.git
-cd NextflowPipeline
+cd NextFlowPipeline
 ```
 
 ## Tips to run
@@ -15,16 +15,18 @@ To test the pipeline, first make sure that <a
 href="https://www.nextflow.io/docs/latest/getstarted.html"> Nextflow is installed </a>
 then :
 ```
-nextflow run polishingPipeline_Main.nf --longReads data/LongReads/SRR5065181.fastq.gz --lrPolish racon --lrNum 1 --shortReads data/ShortReads/SRR1706186.fastq.gz --srPolish pilon --srNum 1 --srAligner bwa --assembly data/Assembly/assembly.raw.fa --lineage data/enterobacteriales_odb9 --species E_coli_K12  --allSteps true --kat true --outdir ./TestPipeline/
+nextflow run main.nf --longReads data/LongReads/SRR5065181.fastq.gz --lrPolish racon --lrNum 1 --shortReads data/ShortReads/SRR1706186.fastq.gz --srPolish pilon --srNum 1 --srAligner bwa --assembly data/Assembly/assembly.raw.fa --lineage data/enterobacteriales_odb9 --species E_coli_K12  --allSteps true --kat true --outdir ./TestPipeline/
 ```
-If you're running pipeline on clusters, verify your nextflow version and the version in runTest.sh and :
+
+If you're running pipeline on clusters, verify the cluster nextflow version and the version in runTest.sh and :
 ```
 sbatch runTest.sh
 ```
 
 To use the pipeline with your own data, it's better to use path to Long reads FILE and path to Short reads DIRECTORY.
 
-The default value of the pipeline are the one giving the best results on our training data (E.coli K12 with LongReads wtdbg2 assembly)
+The default value of the pipeline are the one giving the best results on our training data (E.coli K12 with LongReads wtdbg2 assembly).
+
 Long reads used: https://www.ebi.ac.uk/ena/data/view/SRR5065181
 
 Short reads used: https://www.ebi.ac.uk/ena/data/view/SRR1706186
