@@ -1,3 +1,8 @@
+V1.4:
+Possibility to run bwa with multiple reads
+Changes srAligner to shortReadsBwa and shortReadsLongranger (file or directory specifications)
+Improved documentation
+
 V1.3:
 Run up to 1500 simultaneous jobs on cluster (15x faster pilon steps)
 Ressources optimisation for RaconLR, PilonSR, longranger

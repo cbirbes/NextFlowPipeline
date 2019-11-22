@@ -24,15 +24,17 @@ def helpMessage() {
   Usage:
 
     The typical command for running the pipeline is as follows:
-    nextflow run main.nf --longReads longReads.fq.gz --shortReads /path/to/DemultiplexData/ --assembly assembly.fa [options]
+    nextflow run main.nf --longReads longReads.fq.gz --shortReadsLongranger /path/to/Data/ --assembly assembly.fa [options]
 
 
-	Mandatory arguments:
-		--longReads       Path to long reads fasta or fastq .gz file
-      	 AND/OR
-		--shortReads      Path to short reads directory (For best performance, prefer 2 reads files/directory)
+	Mandatory arguments (minimum 1 reads file, can't use --shortReadsBwa and --shortReadsLongranger in the same run):
+		--longReads       Path to long reads fasta or fastq .gz file. If you have more than one file, concatenate them
 
-		--assembly        Fasta file of genome assembly to polish
+    --shortReadsBwa1  Path to short reads file 1, using bwa as aligner
+    --shortReadsBwa2  Path to short reads file 2, using bwa as aligner
+		--shortReadsLongranger    Path to short reads directory, using longranger as aligner
+
+		--assembly        Path to fasta file of genome assembly to polish
 
 
 	Options:
@@ -41,20 +43,18 @@ def helpMessage() {
 
 		--lrNum	    			Number of long reads polishing to run (default value: 2)
 
-    --alignerExt      Alignment file extension for polishing with racon: paf (reduce quality, improve speed) or sam (default value: sam)
+    --alignerExt      Alignment file extension for polishing with racon: paf (reduce polished output quality, improve speed) or sam (default value: sam)
 
   Short Reads options :
 		--srPolish	   		Polisher to use with short reads: pilon, racon, freebayes or wtdbg2 (default value: pilon)
 
 		--srNum	    			Number of short reads polishing to run (default value: 2)
 
-    --chunck          Size of targets for parallelization with pilon (default value : 10000000)
+    --chunck          Size of targets chuncks for parallelization with pilon (default value : 10000000)
 
-		--noChanges		   	If "true", polish until there are no more changes (defaults value: false). Overwrite all short reads options
+		--noChanges		   	If "true", polish with pilon until there are no more changes (defaults value: false). Overwrite all short reads options
 
-    --srAligner			  Aligner to use for short reads: bwa or longranger (default value : longranger). For bwa precise the entire path to the reads, for samtools precise the directory containing the reads.
-
-    --sample          If using "--srAligner longranger" and a directory containing more than 2 reads files, precise the prefix of reads to analyse (--sample option from longranger align)
+    --sample          If using "--shortReadsLongranger and a directory containing more than 2 reads files, precise the prefix of reads to analyse (--sample option from longranger align)
 
     --poolseqSize     Size of the poolSeq sample for poolSeq analysis
 
@@ -94,8 +94,10 @@ if (params.help){
 //*********************************
 //* Default values initialization *
 //*********************************
-params.longReads		= false
-params.shortReads		= false
+params.longReads		    = false
+params.shortReadsBwa1		= false
+params.shortReadsBwa2		= false
+params.shortReadsLongranger	= false
 params.assembly			= false
 
 params.lrPolish 		= 'racon'
@@ -106,11 +108,10 @@ params.alignerExt   = 'sam'
 params.srPolish 		= 'pilon'
 params.srNum		    = 2
 SR_number				    = params.srNum
-params.srAligner		= 'longranger'
 params.chunck			  = 10000000
 chunckSize          = Channel.value(params.chunck)
 params.noChanges		= false
-params.sample      = false
+params.sample       = false
 
 params.outdir			  = './results/'
 
@@ -129,8 +130,8 @@ Patt                = params.pattern
 //******************************************
 //* Check if reads are given and not empty *
 //******************************************
-if (!params.longReads && !params.shortReads) {
-	exit 1, "You must specify at least one short or long read file using --shortReads or --longReads."
+if (!params.longReads && !params.shortReadsBwa1 && !params.shortReadsBwa2 && !params.shortReadsLongranger) {
+	exit 1, "You must specify at least one short or long read file using --shortReadsBwa1, --shortReadsBwa2, --shortReadsLongranger or --longReads."
 }
 
 if (params.longReads) {
@@ -139,9 +140,23 @@ if (params.longReads) {
 	mode1=true
 } else { mode1=false }
 
-if (params.shortReads) {
-	ShortReads_ch=Channel.fromPath(params.shortReads, type: 'dir')
-				 .ifEmpty {exit 2, "Short Reads file not found: ${params.shortReads}"}
+if (params.shortReadsLongranger || params.shortReadsBwa1 || params.shortReadsBwa2) {
+  if (params.shortReadsLongranger){
+	  ShortReads_ch=Channel.fromPath(params.shortReadsLongranger, type: 'dir')
+				.ifEmpty {exit 2, "Short Reads file not found: ${params.shortReadsLongranger}"}
+    ShortReads_ch2=Channel.value("")
+  }
+  if (params.shortReadsBwa1){
+    ShortReads_ch=Channel.fromPath(params.shortReadsBwa1)
+       .ifEmpty {exit 2, "Short Reads file not found: ${params.shortReadsBwa1}"}
+    if (params.shortReadsBwa2){
+      ShortReads_ch2=Channel.fromPath(params.shortReadsBwa2)
+          .ifEmpty {exit 2, "Short Reads file not found: ${params.shortReadsBwa2}"}
+    }
+    else{
+      ShortReads_ch2=Channel.value("")
+    }
+  }
 	mode2=true
 } else { mode2=false }
 
@@ -161,8 +176,8 @@ if (!params.assembly) {
 //* Check BUSCO input parameters *
 //********************************
 if (params.lineage) {
-  Lineage_ch=Channel.fromPath(params.lineage, type: 'dir')
-						.ifEmpty {exit 1, "Assembly file not found: ${params.lineage}"}
+  Lineage_ch=Channel.fromPath("/usr/local/bioinfo/src/BUSCO/datasets/${params.lineage}", type: 'dir')
+						.ifEmpty {exit 1, "Assembly file not found: /usr/local/bioinfo/src/BUSCO/datasets/${params.lineage}"}
             .into {LineageSR_ch; LineageLR_ch; LineageSR1_ch; LineageSR2_ch; LineageSR3_ch}
 	BUSCOspecies_ch = Channel.value(params.species)
 	mode3 = true
@@ -212,10 +227,7 @@ if (!params.noChanges){
 	}
 
 //* Sample option for longranger
-  if (params.srAligner != 'longranger' && params.srAligner != 'bwa'){
-    exit 1, "Option --srAligner must be longranger or bwa"
-  }
-  if (params.srAligner == 'longranger' && params.sample) {
+  if (params.shortReadsLongranger && params.sample) {
     param = '--sample='
     Sample=Channel.value(param.concat(params.sample))
   }
@@ -223,11 +235,9 @@ if (!params.noChanges){
     Sample=Channel.value('')
   }
 
-  if (params.srAligner == 'longranger' && params.srPolish == 'racon'){
-    exit 1, "Incompatible srAligner (${params.srAligner}) and srPolish (${params.srPolish}) combinaison, try bwa as aligner or an other polisher"
+  if (params.shortReadsLongranger && params.srPolish == 'racon'){
+    exit 1, "Incompatible short reads aligner (longranger) and short reads polisher (racon) combinaison, try bwa as aligner or an other polisher"
   }
-
-
 }
 
 
@@ -439,17 +449,17 @@ if (mode1) {
 			set map, index from MapSamtoolsLR_ch
 
 			output:
-			file "assembly.pilon${name}.fa" into PolisherAssembly_ch, AssemblyBuscoLR_ch
+			file "assembly.pilon${name}.fasta" into PolisherAssembly_ch, AssemblyBuscoLR_ch
 			file "${final_name}" optional true into FinalPolisherAssembly_ch
 
 			script:
 			iteration_polisherLR << "pilon"
 			name = iteration_polisherLR.size()
-			final_name="assembly.pilon"+LR_number+".fa"
+			final_name="assembly.pilon"+LR_number+".fasta"
 			"""
 			module load bioinfo/pilon-v1.22
 			module load system/Java8
-			java -Xmx32G -jar /usr/local/bioinfo/src/Pilon/pilon-v1.22/pilon-1.22.jar --genome ${assembly} --bam ${map} --fix bases,gaps --changes --output pilon${name}
+			java -Xmx32G -jar /usr/local/bioinfo/src/Pilon/pilon-v1.22/pilon-1.22.jar --genome ${assembly} --bam ${map} --fix bases,gaps --changes --output assembly.pilon${name}
 			"""
 		}
 	}
@@ -504,6 +514,7 @@ if (mode1) {
 if (mode2) {
 //* Create iteration condition, PolisherAssemblySR channel, split reads into multiple channels and the loop for multiple polish using short reads *
 	ShortReads_ch.collect().into{ShortReadsAligner_ch; ShortReadsAligner2_ch; ShortReadsAligner3_ch; ShortReadsPolisher_ch; ShortReadsKat_ch}
+  ShortReads_ch2.collect().into{ShortReadsAligner_ch2; ShortReadsAligner2_ch2; ShortReadsAligner3_ch2; ShortReadsPolisher_ch2; ShortReadsKat_ch2}
 	iteration_polisherSR=[]
 	PolisherAssemblySR_ch = Channel.create()
 
@@ -538,48 +549,96 @@ if (mode2) {
 //* PROCESS PART *
 //****************
 //* Map short reads to assembly using bwa-mem *
-	if (params.srAligner == "bwa"){
-		process bwa_mem {
-			label 'bwa_mem'
+	if (params.shortReadsBwa1 && params.srPolish == "racon"){
+    if (params.shortReadsBwa2){
+		  process Dbwa_mem_sam {
+			  label 'bwa_mem'
 
-			input:
-			file assembly from AssemblyBwa_ch
-			file reads from ShortReadsAligner_ch
+			  input:
+			  file assembly from AssemblyBwa_ch
+			  file reads1 from ShortReadsAligner_ch
+        file reads2 from ShortReadsAligner_ch2
 
-			output:
-			file 'map.polisher.sam' into MapBwa_ch
+			  output:
+			  file 'map.polisher.sam' into MapBwa_ch
 
-			script:
-			"""
-			module load bioinfo/bwa-0.7.17
-			bwa index ${assembly}
-			bwa mem -t 8 ${assembly} ${reads} >  map.polisher.sam
-			"""
-		}
+			  script:
+			  """
+			  module load bioinfo/bwa-0.7.17
+			  bwa index ${assembly}
+			  bwa mem -t 8 ${assembly} ${reads1} ${reads2} >  map.polisher.sam
+			  """
+		  }
+    }
+    else {
+      process bwa_mem_sam {
+			  label 'bwa_mem'
 
-//* Convert .sam file to .sorted.bam file for polishers (except racon)
-    if (params.srPolish != "racon"){
-      process samtoolsSR{
-        label 'samtools'
+			  input:
+			  file assembly from AssemblyBwa_ch
+			  file reads1 from ShortReadsAligner_ch
+
+			  output:
+			  file 'map.polisher.sam' into MapBwa_ch
+
+			  script:
+			  """
+			  module load bioinfo/bwa-0.7.17
+			  bwa index ${assembly}
+			  bwa mem -t 8 ${assembly} ${reads1}  >  map.polisher.sam
+			  """
+		  }
+    }
+  }
+
+  if (params.shortReadsBwa1 && params.srPolish != "racon"){
+    if (params.shortReadsBwa2){
+      process Dbwa_mem_bam {
+        label 'bwa_samtools'
         input:
-        file map from MapBwa_ch
+        file assembly from AssemblyBwa_ch
+    		file reads1 from ShortReadsAligner_ch
+        file reads2 from ShortReadsAligner_ch2
 
         output:
         set file("map.polisher.sorted.bam"), file("map.polisher.sorted.bam.bai") into MapSamtoolsSR_ch
 
         script:
         """
+        module load bioinfo/bwa-0.7.17
         module load bioinfo/samtools-1.4
-        samtools view -S -b ${map} > map.polisher.bam
+  			bwa index ${assembly}
+  			bwa mem -t 8 ${assembly} ${reads1} ${reads2} | samtools view -S -b > map.polisher.bam
         samtools sort map.polisher.bam -o map.polisher.sorted.bam
         samtools index map.polisher.sorted.bam
         """
       }
     }
-	}
+    else {
+      process bwa_mem_bam {
+        label 'bwa_samtools'
+        input:
+        file assembly from AssemblyBwa_ch
+    		file reads1 from ShortReadsAligner_ch
+
+        output:
+        set file("map.polisher.sorted.bam"), file("map.polisher.sorted.bam.bai") into MapSamtoolsSR_ch
+
+        script:
+        """
+        module load bioinfo/bwa-0.7.17
+        module load bioinfo/samtools-1.4
+  			bwa index ${assembly}
+  			bwa mem -t 8 ${assembly} ${reads1} | samtools view -S -b > map.polisher.bam
+        samtools sort map.polisher.bam -o map.polisher.sorted.bam
+        samtools index map.polisher.sorted.bam
+        """
+      }
+    }
+  }
 
 //* Map short reads to assembly using longranger *
-  if (params.srAligner == "longranger" && params.srPolish != "racon"){
+  if (params.shortReadsLongranger && params.srPolish != "racon"){
     process mkref {
       label 'longranger_mkref'
 
@@ -719,45 +778,53 @@ if (mode2) {
 //LOOP TWO #################################################################################################################################
 			if (params.srNum >= 2) {
 				PolisherAssemblySR2_ch.into{AssemblyBwa2_ch; Assembly4Longranger2_ch; AssemblyDivide2_ch; AssemblyPolisher2_ch}
-				if (params.srAligner == "bwa"){
-					process bwa_mem2 {
-						label 'bwa_mem'
+				if (params.shortReadsBwa1){
+          if (params.shortReadsBwa2){
+            process Dbwa_mem_bam2 {
+              label 'bwa_samtools'
+              input:
+              file assembly from AssemblyBwa2_ch
+          		file reads1 from ShortReadsAligner2_ch
+              file reads2 from ShortReadsAligner2_ch2
 
-						input:
-						file assembly from AssemblyBwa2_ch
-						file reads from ShortReadsAligner2_ch
+              output:
+              set file("map.polisher.sorted.bam"), file("map.polisher.sorted.bam.bai") into MapPilon2_ch
 
-						output:
-						file 'map.polisher.sam' into MapBwa2_ch
+              script:
+              """
+              module load bioinfo/bwa-0.7.17
+              module load bioinfo/samtools-1.4
+        			bwa index ${assembly}
+        			bwa mem -t 8 ${assembly} ${reads1} ${reads2} | samtools view -S -b > map.polisher.bam
+              samtools sort map.polisher.bam -o map.polisher.sorted.bam
+              samtools index map.polisher.sorted.bam
+              """
+            }
+          }
+          else{
+            process bwa_mem_bam2 {
+              label 'bwa_samtools'
+              input:
+              file assembly from AssemblyBwa2_ch
+          		file reads1 from ShortReadsAligner2_ch
 
-						script:
-						"""
-						module load bioinfo/bwa-0.7.17
-						bwa index ${assembly}
-						bwa mem -t 8 ${assembly} ${reads} >  map.polisher.sam
+              output:
+              set file("map.polisher.sorted.bam"), file("map.polisher.sorted.bam.bai") into MapPilon2_ch
 
-						"""
-					}
-
-					process samtools2{
-						label 'samtools'
-						input:
-						file map from MapBwa2_ch
-
-						output:
-						set file("map.polisher.sorted.bam"), file("map.polisher.sorted.bam.bai") into MapPilon2_ch
-
-						script:
-						"""
-						module load bioinfo/samtools-1.4
-						samtools view -S -b ${map} > map.polisher.bam
-						samtools sort map.polisher.bam -o map.polisher.sorted.bam
-						samtools index map.polisher.sorted.bam
-						"""
-					}
+              script:
+              """
+              module load bioinfo/bwa-0.7.17
+              module load bioinfo/samtools-1.4
+        			bwa index ${assembly}
+        			bwa mem -t 8 ${assembly} ${reads1} | samtools view -S -b > map.polisher.bam
+              samtools sort map.polisher.bam -o map.polisher.sorted.bam
+              samtools index map.polisher.sorted.bam
+              """
+            }
+          }
         }
 
-				if (params.srAligner == "longranger"){
+				if (params.shortReadsLongranger){
 					process mkref2 {
 						label 'longranger_mkref'
 
@@ -878,45 +945,53 @@ if (mode2) {
 // LOOP THREE #################################################################################################################################
   			if (params.srNum >= 3) {
   				PolisherAssemblySR3_ch.into{AssemblyBwa3_ch; Assembly4Longranger3_ch; AssemblyDivide3_ch; AssemblyPolisher3_ch}
-  				if (params.srAligner == "bwa"){
-  					process bwa_mem3 {
-  						label 'bwa_mem'
+  				if (params.shortReadsBwa1){
+            if (params.shortReadsBwa2){
+              process Dbwa_mem_bam3 {
+                label 'bwa_samtools'
+                input:
+                file assembly from AssemblyBwa3_ch
+            		file reads1 from ShortReadsAligner3_ch
+                file reads2 from ShortReadsAligner3_ch2
 
-  						input:
-  						file assembly from AssemblyBwa3_ch
-  						file reads from ShortReadsAligner3_ch
+                output:
+                set file("map.polisher.sorted.bam"), file("map.polisher.sorted.bam.bai") into MapPilon3_ch
 
-  						output:
-  						file 'map.polisher.sam' into MapBwa3_ch
+                script:
+                """
+                module load bioinfo/bwa-0.7.17
+                module load bioinfo/samtools-1.4
+          			bwa index ${assembly}
+          			bwa mem -t 8 ${assembly} ${reads1} ${reads2} | samtools view -S -b > map.polisher.bam
+                samtools sort map.polisher.bam -o map.polisher.sorted.bam
+                samtools index map.polisher.sorted.bam
+                """
+              }
+            } else{
+              process bwa_mem_bam3 {
+                label 'bwa_samtools'
+                input:
+                file assembly from AssemblyBwa3_ch
+            		file reads1 from ShortReadsAligner3_ch
 
-  						script:
-  						"""
-  						module load bioinfo/bwa-0.7.17
-  						bwa index ${assembly}
-  						bwa mem -t 8 ${assembly} ${reads} >  map.polisher.sam
+                output:
+                set file("map.polisher.sorted.bam"), file("map.polisher.sorted.bam.bai") into MapPilon3_ch
 
-  						"""
-  					}
+                script:
+                """
+                module load bioinfo/bwa-0.7.17
+                module load bioinfo/samtools-1.4
+          			bwa index ${assembly}
+          			bwa mem -t 8 ${assembly} ${reads1} | samtools view -S -b > map.polisher.bam
+                samtools sort map.polisher.bam -o map.polisher.sorted.bam
+                samtools index map.polisher.sorted.bam
+                """
+              }
+            }
 
-  					process samtools3{
-  						label 'samtools'
-  						input:
-  						file map from MapBwa3_ch
-
-  						output:
-  						set file("map.polisher.sorted.bam"), file("map.polisher.sorted.bam.bai") into MapPilon3_ch
-
-  						script:
-  						"""
-  						module load bioinfo/samtools-1.4
-  						samtools view -S -b ${map} > map.polisher.bam
-  						samtools sort map.polisher.bam -o map.polisher.sorted.bam
-  						samtools index map.polisher.sorted.bam
-  						"""
-  					}
           }
 
-  				if (params.srAligner == "longranger"){
+  				if (params.shortReadsLongranger){
   					process mkref3 {
   						label 'longranger_mkref'
 
@@ -1232,7 +1307,7 @@ if (mode3){
 
 			input:
 			file assembly from AssemblyBuscoFinal_ch
-			file lineage from Lineage_ch.collect()
+			file lineage from LineageSR_ch.collect()
 			val species from BUSCOspecies_ch
 
 			output:
@@ -1305,22 +1380,44 @@ if (mode3){
 //------------------------------------------------------
 //* if params.kat=true run kat at the end of the pipeline (SR and/or LR vs Last available assembly generated by the pipeline.)
 if (params.kat && mode2){
-  process katSR {
-    label 'katSR'
+  if (params.shortReadsBwa2){
+    process DkatSR {
+      label 'katSR'
 
-    input:
-    file assembly from AssemblyKat_ch
-    file reads from ShortReadsKat_ch
+      input:
+      file assembly from AssemblyKat_ch
+      file reads1 from ShortReadsKat_ch
+      file reads2 from ShortReadsKat_ch2
 
-    output:
-    file "*" into KatSROutput_ch
+      output:
+      file "*" into KatSROutput_ch
 
-    script:
-    """
-    module load system/Miniconda3-4.4.10
-    module load bioinfo/kat-2.4.1
-    kat comp -t 8 ${reads} ${assembly}
-    """
+      script:
+      """
+      module load system/Miniconda3-4.4.10
+      module load bioinfo/kat-2.4.1
+      kat comp -t 8 '${reads1} ${reads2}' ${assembly}
+      """
+    }
+  }
+  else{
+    process katSR {
+      label 'katSR'
+
+      input:
+      file assembly from AssemblyKat_ch
+      file reads1 from ShortReadsKat_ch
+
+      output:
+      file "*" into KatSROutput_ch
+
+      script:
+      """
+      module load system/Miniconda3-4.4.10
+      module load bioinfo/kat-2.4.1
+      kat comp -t 8 ${reads1} ${assembly}
+      """
+    }
   }
 }
 
