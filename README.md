@@ -8,6 +8,7 @@ To use this pipeline, you need at least an initial assembly and short and/or lon
 ```
 git clone --recursive https://github.com/Clement-BIRBES/NextFlowPipeline.git
 cd NextFlowPipeline
+cd test
 ```
 
 ## Tips to run
@@ -17,7 +18,7 @@ To test the pipeline, first make sure that <a
 href="https://www.nextflow.io/docs/latest/getstarted.html"> Nextflow is installed </a>
 then :
 ```
-nextflow run main.nf --longReads data/LongReads/SRR5065181.fastq.gz  --lrPolish racon --lrNum 1 --shortReadsBwa1 data/ShortReads/SRR1706185.fastq.gz --srPolish pilon --srNum 1 --assembly data/Assembly/assembly.raw.fa --outdir ./TestPipeline/ --lineage enterobacteriales_odb9 --species E_coli_K12 --kat true
+nextflow run ../main.nf --longReads data/LongReads/SRR5065181.fastq.gz  --lrPolish racon --lrNum 1 --shortReadsBwa1 data/ShortReads/SRR1706185.fastq.gz --srPolish pilon --srNum 1 --assembly data/Assembly/assembly.raw.fa --outdir ./TestPipeline/ --lineage enterobacteriales_odb9 --species E_coli_K12 --kat true
 ```
 
 If you're running pipeline on clusters, verify the cluster nextflow version and the version in runTest.sh and :
