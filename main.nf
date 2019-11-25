@@ -700,7 +700,7 @@ if (mode2) {
 				val length from chunckSize
 
 				output:
-				file "ctg.txt" into ListContigs_ch
+				file "ctg.txt" into ListContigs_ch, ListContigs_ch2
 
 				shell:
 				'''
@@ -735,6 +735,8 @@ if (mode2) {
 				input:
 				file fastas from AssemblySplitSR_ch.collect()
         val length from chunckSize
+        file ctg from ListContigs_ch2
+
 
 				output:
 				file "assembly.pilon${name}.fa" into PolisherAssemblySR2_ch, AssemblyBuscoSR1_ch
@@ -867,7 +869,8 @@ if (mode2) {
 					val length from chunckSize
 
 					output:
-					file "ctg.txt" into ListContigs2_ch
+					file "ctg.txt" into ListContigs2_ch, ListContigs2_ch2
+
 
 					shell:
 					'''
@@ -902,6 +905,8 @@ if (mode2) {
 					input:
 					file fastas from AssemblySplitSR2_ch.collect()
           val length from chunckSize
+          file ctg from ListContigs2_ch2
+
 
 					output:
 					file "assembly.pilon${name}.fa" into PolisherAssemblySR3_ch, AssemblyBuscoSR2_ch
@@ -1034,7 +1039,8 @@ if (mode2) {
   					val length from chunckSize
 
   					output:
-  					file "ctg.txt" into ListContigs3_ch
+  					file "ctg.txt" into ListContigs3_ch, ListContigs3_ch2
+
 
   					shell:
   					'''
@@ -1069,6 +1075,8 @@ if (mode2) {
   					input:
   					file fastas from AssemblySplitSR3_ch.collect()
             val length from chunckSize
+            file ctg from ListContigs3_ch2
+
 
   					output:
   					file "assembly.pilon${name}.fa" into PolisherAssemblySR4_ch, AssemblyBuscoSR3_ch
