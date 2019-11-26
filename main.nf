@@ -725,7 +725,7 @@ if (mode2) {
 				script:
 				"""
 				module load system/Java8
-				java -Xmx32G -jar /usr/local/bioinfo/src/Pilon/pilon-v1.22/pilon-1.22.jar --genome ${assembly} --bam ${bam} --fix bases,gaps --changes --output pilonSR${contigs} --targets ${contigs}
+				java -Xmx32G -jar /usr/local/bioinfo/src/Pilon/pilon-v1.22/pilon-1.22.jar --genome ${assembly} --bam ${bam} --fix bases,gaps --changes --output pilonSR${num} --targets ${contigs}
 				"""
 			}
 
@@ -895,7 +895,7 @@ if (mode2) {
 					script:
 					"""
 					module load system/Java8
-					java -Xmx32G -jar /usr/local/bioinfo/src/Pilon/pilon-v1.22/pilon-1.22.jar --genome ${assembly} --bam ${bam} --fix bases,gaps --changes --output pilonSR${contigs} --targets ${contigs}
+					java -Xmx32G -jar /usr/local/bioinfo/src/Pilon/pilon-v1.22/pilon-1.22.jar --genome ${assembly} --bam ${bam} --fix bases,gaps --changes --output pilonSR${num} --targets ${contigs}
 					"""
 				}
 
@@ -1065,7 +1065,7 @@ if (mode2) {
   					script:
   					"""
   					module load system/Java8
-  					java -Xmx32G -jar /usr/local/bioinfo/src/Pilon/pilon-v1.22/pilon-1.22.jar --genome ${assembly} --bam ${bam} --fix bases,gaps --changes --output pilonSR${contigs} --targets ${contigs}
+  					java -Xmx32G -jar /usr/local/bioinfo/src/Pilon/pilon-v1.22/pilon-1.22.jar --genome ${assembly} --bam ${bam} --fix bases,gaps --changes --output pilonSR${num} --targets ${contigs}
   					"""
   				}
 

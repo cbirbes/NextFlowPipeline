@@ -14,16 +14,16 @@ with open("pilonOut.fa","a") as output:
     FileIn = open("ctg.txt", "r")
     ListContigs=FileIn.read().split("\n")
     for x in range (0,len(ListContigs)):
-        ListContigs[x]=ListContigs[x].replace(str(x+1)+";","").replace("\"","")
-        for record in SeqIO.parse("pilonSR"+str(ListContigs[x])+".fasta","fasta"):
-            if ("-" in ListContigs[x]):
-                if (":1-" in ListContigs[x]):
-                    output.write("\n>"+record.id+"\n")
+        ListContigs[x]=ListContigs[x].split(";")
+        for record in SeqIO.parse("pilonSR"+str(ListContigs[x][0])+".fasta","fasta"):
+            if ("-" in ListContigs[x][1]):
+                if (":1-" in ListContigs[x][1]) or (':"1-' in ListContigs[x][1]):
+                    output.write("\n>"+record.id.replace("_pilon","")+"\n")
                     output.write(str(record.seq))
                 else:
                     output.write(str(record.seq))
             else:
-                output.write("\n>"+record.id+"\n")
+                output.write("\n>"+record.id.replace("_pilon","")+"\n")
                 output.write(str(record.seq))
 
 cmd = "sed -i '1d' pilonOut.fa"

@@ -1,9 +1,7 @@
 V1.5:
 Pilon paralellisation now target multiple short contigs
 No more bam file created, only sam files
-Racon run on unlimitq
-
-
+Racon run on smpq
 
 V1.4:
 Possibility to run bwa with multiple reads
